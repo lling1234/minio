@@ -419,38 +419,39 @@ func initConfigSubsystem(ctx context.Context, newObject ObjectLayer) error {
 
 // serverMain handler called for 'minio server' command.
 func serverMain(ctx *cli.Context) {
+	// 注册系统关闭的信号量
 	signal.Notify(globalOSSignalCh, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
 	go handleSignals()
-
+	// 修改设置，分配512K -> 4K进行内存采样，关闭 mutex prof，关闭统计阻塞的event统计
 	setDefaultProfilerRates()
-
+	// 初始化全局console日志，并作为target加入
 	// Initialize globalConsoleSys system
 	globalConsoleSys = NewConsoleLogger(GlobalContext)
 	logger.AddSystemTarget(globalConsoleSys)
-
+	// bitrotSelfTest 执行自检以确保 bitrot算法计算正确的校验和
 	// Perform any self-tests
 	bitrotSelfTest()
-	erasureSelfTest()
-	compressSelfTest()
+	erasureSelfTest()//erasureSelfTest执行自检以确保纠删算法计算预期的纠删码,支持三种纠删码算法：1. invalidErasureAlgo2. ReedSolomon 3. lastErasureAlgo
+	compressSelfTest()//compressSelfTest执行自检以确保压缩算法完成往返
 
 	// Handle all server environment vars.
-	serverHandleEnvVars()
+	serverHandleEnvVars()//生成Endpoint结构
 
 	// Handle all server command args.
-	serverHandleCmdArgs(ctx)
+	serverHandleCmdArgs(ctx)//处理环境变量
 
 	// Initialize KMS configuration
-	handleKMSConfig()
+	handleKMSConfig()//密钥管理系统（KMS）支持SSE-S3,，该对象密钥受 KMS管理的主密钥保护。
 
 	// Set node name, only set for distributed setup.
-	globalConsoleSys.SetNodeName(globalLocalNodeName)
+	globalConsoleSys.SetNodeName(globalLocalNodeName)//设置分布式节点名称
 
 	// Initialize all help
-	initHelp()
+	initHelp()//处理所有的帮助信息
 
 	// Initialize all sub-systems
-	initAllSubsystems(GlobalContext)
+	initAllSubsystems(GlobalContext)//初始化子系统
 
 	// Is distributed setup, error out if no certificates are found for HTTPS endpoints.
 	if globalIsDistErasure {
@@ -473,7 +474,8 @@ func serverMain(ctx *cli.Context) {
 	if !globalActiveCred.IsValid() && globalIsDistErasure {
 		globalActiveCred = auth.DefaultCredentials
 	}
-
+// 根据操作系统进程的最大内存，fd，线程数设置：
+// 对于线程数，将 Go 运行时最大线程阈值设置为内核设置的 90%。仅在大于默认值（10000）时才设置最大线程数
 	// Set system resources to maximum.
 	setMaxResources()
 
