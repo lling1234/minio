@@ -71,24 +71,24 @@ func configureServerHandler(endpointServerPools EndpointServerPools) (http.Handl
 	// Initialize router. `SkipClean(true)` stops gorilla/mux from
 	// normalizing URL path minio/minio#3256
 	router := mux.NewRouter().SkipClean(true).UseEncodedPath()
-
+	// 1. 分布式模式下，注册以下路由
 	// Initialize distributed NS lock.
 	if globalIsDistErasure {
 		registerDistErasureRouters(router, endpointServerPools)
 	}
-
+	// admin相关路由：path+/mino/admin+operations
 	// Add Admin router, all APIs are enabled in server mode.
 	registerAdminRouter(router, true)
 
 	// Add healthcheck router
 	registerHealthCheckRouter(router)
-
+	// 指标监控 prometheus
 	// Add server metrics router
 	registerMetricsRouter(router)
-
+	// 临时凭证路由
 	// Add STS router always.
 	registerSTSRouter(router)
-
+	// 密钥管理系统路由
 	// Add KMS router
 	registerKMSRouter(router)
 

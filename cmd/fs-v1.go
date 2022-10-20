@@ -146,7 +146,7 @@ func NewFSObjectLayer(ctx context.Context, fsPath string) (ObjectLayer, error) {
 	// Assign a new UUID for FS minio mode. Each server instance
 	// gets its own UUID for temporary file transaction.
 	fsUUID := mustGetUUID()
-
+	// 使用Endpoint路径以及生成的新UUID，创建minio元数据卷
 	// Initialize meta volume, if volume already exists ignores it.
 	if err = initMetaVolumeFS(fsPath, fsUUID); err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func NewFSObjectLayer(ctx context.Context, fsPath string) (ObjectLayer, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	// 初始化文件系统fs
 	// Initialize fs objects.
 	fs := &FSObjects{
 		fsPath:       fsPath,

@@ -432,26 +432,26 @@ func serverMain(ctx *cli.Context) {
 	// bitrotSelfTest 执行自检以确保 bitrot算法计算正确的校验和
 	// Perform any self-tests
 	bitrotSelfTest()
-	erasureSelfTest()//erasureSelfTest执行自检以确保纠删算法计算预期的纠删码,支持三种纠删码算法：1. invalidErasureAlgo2. ReedSolomon 3. lastErasureAlgo
-	compressSelfTest()//compressSelfTest执行自检以确保压缩算法完成往返
+	erasureSelfTest()  //erasureSelfTest执行自检以确保纠删算法计算预期的纠删码,支持三种纠删码算法：1. invalidErasureAlgo2. ReedSolomon 3. lastErasureAlgo
+	compressSelfTest() //compressSelfTest执行自检以确保压缩算法完成往返
 
 	// Handle all server environment vars.
-	serverHandleEnvVars()//生成Endpoint结构
+	serverHandleEnvVars() //生成Endpoint结构
 
 	// Handle all server command args.
-	serverHandleCmdArgs(ctx)//处理环境变量
+	serverHandleCmdArgs(ctx) //处理环境变量
 
 	// Initialize KMS configuration
-	handleKMSConfig()//密钥管理系统（KMS）支持SSE-S3,，该对象密钥受 KMS管理的主密钥保护。
+	handleKMSConfig() //密钥管理系统（KMS）支持SSE-S3,，该对象密钥受 KMS管理的主密钥保护。
 
 	// Set node name, only set for distributed setup.
-	globalConsoleSys.SetNodeName(globalLocalNodeName)//设置分布式节点名称
+	globalConsoleSys.SetNodeName(globalLocalNodeName) //设置分布式节点名称
 
 	// Initialize all help
-	initHelp()//处理所有的帮助信息
+	initHelp() //处理所有的帮助信息
 
 	// Initialize all sub-systems
-	initAllSubsystems(GlobalContext)//初始化子系统
+	initAllSubsystems(GlobalContext) //初始化子系统
 
 	// Is distributed setup, error out if no certificates are found for HTTPS endpoints.
 	if globalIsDistErasure {
@@ -474,8 +474,8 @@ func serverMain(ctx *cli.Context) {
 	if !globalActiveCred.IsValid() && globalIsDistErasure {
 		globalActiveCred = auth.DefaultCredentials
 	}
-// 根据操作系统进程的最大内存，fd，线程数设置：
-// 对于线程数，将 Go 运行时最大线程阈值设置为内核设置的 90%。仅在大于默认值（10000）时才设置最大线程数
+	// 根据操作系统进程的最大内存，fd，线程数设置：
+	// 对于线程数，将 Go 运行时最大线程阈值设置为内核设置的 90%。仅在大于默认值（10000）时才设置最大线程数
 	// Set system resources to maximum.
 	setMaxResources()
 
@@ -489,7 +489,7 @@ func serverMain(ctx *cli.Context) {
 	if maxProcs < cpuProcs {
 		logger.Info(color.RedBold("WARNING: Detected GOMAXPROCS(%d) < NumCPU(%d), please make sure to provide all PROCS to MinIO for optimal performance", maxProcs, cpuProcs))
 	}
-
+	// 配置路由
 	// Configure server.
 	handler, err := configureServerHandler(globalEndpoints)
 	if err != nil {
@@ -524,14 +524,14 @@ func serverMain(ctx *cli.Context) {
 	}()
 
 	setHTTPServer(httpServer)
-
+	// 纠删码模式下的相关配置检查
 	if globalIsDistErasure && globalEndpoints.FirstLocal() {
 		// Additionally in distributed setup, validate the setup and configuration.
 		if err := verifyServerSystemConfig(GlobalContext, globalEndpoints); err != nil {
 			logger.Fatal(err, "Unable to start the server")
 		}
 	}
-
+	// 初始化ObjectLayer
 	newObject, err := newObjectLayer(GlobalContext, globalEndpoints)
 	if err != nil {
 		logFatalErrs(err, Endpoint{}, true)
@@ -564,7 +564,7 @@ func serverMain(ctx *cli.Context) {
 
 		logger.LogIf(GlobalContext, err)
 	}
-
+	// 验证认证信息是否是默认认证信息
 	if globalActiveCred.Equal(auth.DefaultCredentials) {
 		msg := fmt.Sprintf("WARNING: Detected default credentials '%s', we recommend that you change these values with 'MINIO_ROOT_USER' and 'MINIO_ROOT_PASSWORD' environment variables",
 			globalActiveCred)
@@ -644,7 +644,7 @@ func serverMain(ctx *cli.Context) {
 
 		// Initialize bucket notification system
 		logger.LogIf(GlobalContext, globalEventNotifier.InitBucketTargets(GlobalContext, newObject))
-
+		// 如果启用缓存，初始化缓存层
 		// initialize the new disk cache objects.
 		if globalCacheConfig.Enabled {
 			logger.Info(color.Yellow("WARNING: Drive caching is deprecated for single/multi drive MinIO setups. Please migrate to using MinIO S3 gateway instead of drive caching"))
@@ -696,7 +696,7 @@ func serverMain(ctx *cli.Context) {
 // Initialize object layer with the supplied disks, objectLayer is nil upon any error.
 func newObjectLayer(ctx context.Context, endpointServerPools EndpointServerPools) (newObject ObjectLayer, err error) {
 	// For FS only, directly use the disk.
-	if endpointServerPools.NEndpoints() == 1 {
+	if endpointServerPools.NEndpoints() == 1 { //单机模式
 		// Initialize new FS object layer.
 		newObject, err = NewFSObjectLayer(ctx, endpointServerPools[0].Endpoints[0].Path)
 		if err == nil {
@@ -707,5 +707,5 @@ func newObjectLayer(ctx context.Context, endpointServerPools EndpointServerPools
 		}
 	}
 
-	return newErasureServerPools(ctx, endpointServerPools)
+	return newErasureServerPools(ctx, endpointServerPools) //纠删码模式
 }
