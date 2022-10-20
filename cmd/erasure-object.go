@@ -910,8 +910,8 @@ func (er erasureObjects) PutObject(ctx context.Context, bucket string, object st
 
 // putObject wrapper for erasureObjects PutObject
 func (er erasureObjects) putObject(ctx context.Context, bucket string, object string, r *PutObjReader, opts ObjectOptions) (objInfo ObjectInfo, err error) {
-	auditObjectErasureSet(ctx, object, &er)
-
+	auditObjectErasureSet(ctx, object, &er) //向当前上下文添加擦除集信息
+	//  1.确定数据块、校验块个数及写入Quorum
 	if opts.CheckPrecondFn != nil {
 		obj, err := er.getObjectInfo(ctx, bucket, object, opts)
 		if err != nil {
@@ -976,18 +976,18 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 
 	// we now know the number of blocks this object needs for data and parity.
 	// writeQuorum is dataBlocks + 1
-	writeQuorum := dataDrives
+	writeQuorum := dataDrives //如果数据块与校验块的个数相等，则writeQuorum++
 	if dataDrives == parityDrives {
 		writeQuorum++
 	}
-
+	// 验证输入数据的大小，它永远不能小于零。
 	// Validate input data size and it can never be less than zero.
 	if data.Size() < -1 {
 		logger.LogIf(ctx, errInvalidArgument, logger.Application)
 		return ObjectInfo{}, toObjectErr(errInvalidArgument)
 	}
 
-	// Initialize parts metadata
+	// Initialize parts metadata 初始化部分元数据
 	partsMetadata := make([]FileInfo, len(storageDisks))
 
 	fi := newFileInfo(pathJoin(bucket, object), dataDrives, parityDrives)
@@ -1004,20 +1004,20 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 	uniqueID := mustGetUUID()
 	tempObj := uniqueID
 
-	// Initialize erasure metadata.
+	// Initialize erasure metadata. 擦除的元数据进行初始化。
 	for index := range partsMetadata {
 		partsMetadata[index] = fi
 	}
 
-	// Order disks according to erasure distribution
+	// Order disks according to erasure distribution 根据擦除分布对磁盘进行排序
 	var onlineDisks []StorageAPI
 	onlineDisks, partsMetadata = shuffleDisksAndPartsMetadata(storageDisks, partsMetadata, fi)
-
+	// BlockSize：表示纠删码计算的数据块大小，可以简单理解有1M的用户数据则会根据纠删码规则计算得到数据块+校验块
 	erasure, err := NewErasure(ctx, fi.Erasure.DataBlocks, fi.Erasure.ParityBlocks, fi.Erasure.BlockSize)
 	if err != nil {
 		return ObjectInfo{}, toObjectErr(err, bucket, object)
 	}
-
+	// 为I/O获取缓冲区，从池中返回，如果没有则分配一个新的并返回。
 	// Fetch buffer for I/O, returns from the pool if not allocates a new one and returns.
 	var buffer []byte
 	switch size := data.Size(); {
@@ -1040,19 +1040,19 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 
 	// Delete temporary object in the event of failure.
 	// If PutObject succeeded there would be no temporary
-	// object to delete.
+	// object to delete.	//如果PutObject成功，将没有临时的要删除的对象
 	var online int
 	defer func() {
 		if online != len(onlineDisks) {
 			er.renameAll(context.Background(), minioMetaTmpBucket, tempObj)
 		}
 	}()
-
+	// ShardFileSize：最终纠删码数据shard大小，比如blockSize=1M，数据块个数dataBlocks为5，用户上传一个5M的对象，那么这里会将其分五次进行纠删码计算，最终得到的单个shard的实际文件大小为5*shardSize
 	shardFileSize := erasure.ShardFileSize(data.Size())
 	writers := make([]io.Writer, len(onlineDisks))
 	var inlineBuffers []*bytes.Buffer
 	if shardFileSize >= 0 {
-		if !opts.Versioned && shardFileSize < smallFileThreshold {
+		if !opts.Versioned && shardFileSize < smallFileThreshold { //对于小于128K的文件走普通IO
 			inlineBuffers = make([]*bytes.Buffer, len(onlineDisks))
 		} else if shardFileSize < smallFileThreshold/8 {
 			inlineBuffers = make([]*bytes.Buffer, len(onlineDisks))
@@ -1088,8 +1088,8 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 
 		writers[i] = newBitrotWriter(disk, minioMetaTmpBucket, tempErasureObj, shardFileSize, DefaultBitrotAlgorithm, erasure.ShardSize())
 	}
-
-	toEncode := io.Reader(data)
+	// ShardSize：纠删码块的实际shard大小，比如blockSize=1M，数据块个数dataBlocks为5，那么单个shard大小为209716字节（blockSize/dataBlocks向上取整），是指ec的每个数据小块大小
+	toEncode := io.Reader(data) //IO 读取对象data
 	if data.Size() > bigFileThreshold {
 		// We use 2 buffers, so we always have a full buffer of input.
 		bufA := er.bp.Get()
@@ -1102,13 +1102,13 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 			defer ra.Close()
 		}
 		logger.LogIf(ctx, err)
-	}
+	} //纠删码编码并写入写入器。
 	n, erasureErr := erasure.Encode(ctx, toEncode, writers, buffer, writeQuorum)
 	closeBitrotWriters(writers)
 	if erasureErr != nil {
 		return ObjectInfo{}, toObjectErr(erasureErr, minioMetaTmpBucket, tempErasureObj)
 	}
-
+	// 当读取器的字节数少于请求头中指定的字节数时，应该返回IncompleteBody{}错误。
 	// Should return IncompleteBody{} error when reader has fewer bytes
 	// than specified in request header.
 	if n < data.Size() {
@@ -1144,7 +1144,7 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 		} else {
 			partsMetadata[i].Data = nil
 		}
-		// No need to add checksum to part. We already have it on the object.
+		// No need to add checksum to part. We already have it on the object.不需要给部分添加校验和。物体上已经有了。
 		partsMetadata[i].AddObjectPart(1, "", n, data.ActualSize(), modTime, compIndex, nil)
 		partsMetadata[i].Erasure.AddChecksumInfo(ChecksumInfo{
 			PartNumber: 1,
@@ -1158,13 +1158,13 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 		userDefined["etag"] = opts.PreserveETag
 	}
 
-	// Guess content-type from the extension if possible.
+	// Guess content-type from the extension if possible.如果可能的话，从扩展中猜测内容类型。
 	if userDefined["content-type"] == "" {
 		userDefined["content-type"] = mimedb.TypeByExtension(path.Ext(object))
 	}
 
-	// Fill all the necessary metadata.
-	// Update `xl.meta` content on each disks.
+	// Fill all the necessary metadata.填写所有必要的元数据。
+	// Update `xl.meta` content on each disks.更新的xl。每个磁盘上的元内容。
 	for index := range partsMetadata {
 		partsMetadata[index].Metadata = userDefined
 		partsMetadata[index].Size = n
@@ -1172,13 +1172,13 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 	}
 
 	if len(inlineBuffers) > 0 {
-		// Set an additional header when data is inlined.
+		// Set an additional header when data is inlined. 内联数据时设置附加标头。
 		for index := range partsMetadata {
 			partsMetadata[index].SetInlineData()
 		}
 	}
 
-	// Rename the successfully written temporary object to final location.
+	// Rename the successfully written temporary object to final location.将成功写入的临时对象重命名为最终位置。
 	onlineDisks, err = renameData(ctx, onlineDisks, minioMetaTmpBucket, tempObj, partsMetadata, bucket, object, writeQuorum)
 	for i := 0; i < len(onlineDisks); i++ {
 		if onlineDisks[i] != nil && onlineDisks[i].IsOnline() {
@@ -1189,10 +1189,10 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 		}
 	}
 
-	// For speedtest objects do not attempt to heal them.
+	// For speedtest objects do not attempt to heal them.对于速度测试对象，不尝试治疗他们。
 	if !opts.Speedtest {
 		// Whether a disk was initially or becomes offline
-		// during this upload, send it to the MRF list.
+		// during this upload, send it to the MRF list.无论磁盘在此上传期间初始状态是离线还是离线，都将其发送到MRF列表。
 		for i := 0; i < len(onlineDisks); i++ {
 			if onlineDisks[i] != nil && onlineDisks[i].IsOnline() {
 				continue
@@ -1209,7 +1209,7 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 		}
 		// We might land at .metacache, .trash, .multipart
 		// no need to heal them skip, only when bucket
-		// is '.minio.sys'
+		// is '.minio.sys'//我们可能会停在。metacache，。trash，。multipart不需要治疗它们跳过，只有当桶是'。minio.sys'时
 		if bucket == minioMetaBucket {
 			if wildcard.Match("buckets/*/.metacache/*", entry.name) {
 				return nil
@@ -1251,12 +1251,12 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 			return ObjectInfo{}, toObjectErr(err, bucket, object)
 		}
 	}
-
+	// nsupdate表示命名空间已更新。该函数将阻塞，直到条目被拾取。
 	defer NSUpdated(bucket, object)
 
 	fi.ReplicationState = opts.PutReplicationState()
 	online = countOnlineDisks(onlineDisks)
-
+	// 我们在命名空间锁下向该对象添加了一个新版本，因此这是最新版本。
 	// we are adding a new version to this object under the namespace lock, so this is the latest version.
 	fi.IsLatest = true
 

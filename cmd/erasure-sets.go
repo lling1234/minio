@@ -743,11 +743,11 @@ func crcHashMod(key string, cardinality int) int {
 }
 
 func hashKey(algo string, key string, cardinality int, id [16]byte) int {
-	switch algo {
+	switch algo {//其实在选择pool的时候已经计算过一次对应object会落在那个set中
 	case formatErasureVersionV2DistributionAlgoV1:
-		return crcHashMod(key, cardinality)
+		return crcHashMod(key, cardinality)//crcHash，计算对象名对应的crc值 % set大小
 	case formatErasureVersionV3DistributionAlgoV2, formatErasureVersionV3DistributionAlgoV3:
-		return sipHashMod(key, cardinality, id)
+		return sipHashMod(key, cardinality, id)//sipHash，计算对象名、deploymentID哈希得到 % set大小，当前版本默认为该算法
 	default:
 		// Unknown algorithm returns -1, also if cardinality is lesser than 0.
 		return -1

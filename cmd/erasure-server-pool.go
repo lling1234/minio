@@ -476,9 +476,9 @@ func (z *erasureServerPools) getPoolIdxNoLock(ctx context.Context, bucket, objec
 	if err != nil && !isErrObjectNotFound(err) {
 		return idx, err
 	}
-
+	
 	if isErrObjectNotFound(err) {
-		idx = z.getAvailablePoolIdx(ctx, bucket, object, size)
+		idx = z.getAvailablePoolIdx(ctx, bucket, object, size)//第二步根据object 哈希计算落在每个pool的set单元，然后根据每个pool对应set的可用容量进行选择，会高概率选择上可用容量大的pool
 		if idx < 0 {
 			return -1, toObjectErr(errDiskFull)
 		}
@@ -956,14 +956,14 @@ func (z *erasureServerPools) PutObject(ctx context.Context, bucket string, objec
 	}
 
 	object = encodeDirObject(object)
-
+	// pool只有一个，直接返回
 	if z.SinglePool() {
 		if !isMinioMetaBucketName(bucket) && !hasSpaceFor(getDiskInfos(ctx, z.serverPools[0].getHashedSet(object).getDisks()...), data.Size()) {
 			return ObjectInfo{}, toObjectErr(errDiskFull)
 		}
 		return z.serverPools[0].PutObject(ctx, bucket, object, data, opts)
-	}
-	if !opts.NoLock {
+	} //pool有多个，这里分两步：
+	if !opts.NoLock { //检查无锁
 		ns := z.NewNSLock(bucket, object)
 		lkctx, err := ns.GetLock(ctx, globalOperationTimeout)
 		if err != nil {
@@ -973,7 +973,7 @@ func (z *erasureServerPools) PutObject(ctx context.Context, bucket string, objec
 		defer ns.Unlock(lkctx.Cancel)
 		opts.NoLock = true
 	}
-
+	// 第一步会去查询之前是否存在此数据（bucket+object），如果存在，则返回对应的pool，如果不存在则进入下一步
 	idx, err := z.getPoolIdxNoLock(ctx, bucket, object, data.Size())
 	if err != nil {
 		return ObjectInfo{}, err
