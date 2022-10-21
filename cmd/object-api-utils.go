@@ -625,7 +625,7 @@ type ObjReaderFn func(inputReader io.Reader, h http.Header, cleanupFns ...func()
 // NewGetObjectReader creates a new GetObjectReader. The cleanUpFns
 // are called on Close() in FIFO order as passed in ObjReadFn(). NOTE: It is
 // assumed that clean up functions do not panic (otherwise, they may
-// not all run!).
+// not all run!).NewGetObjectReader创建一个新的GetObjectReader。cleanUpFns在Close()上按FIFO顺序调用，就像在ObjReadFn()中传递的那样。注意:这里假设清理函数不会惊慌(否则，它们可能不会全部运行!)
 func NewGetObjectReader(rs *HTTPRangeSpec, oi ObjectInfo, opts ObjectOptions) (
 	fn ObjReaderFn, off, length int64, err error,
 ) {

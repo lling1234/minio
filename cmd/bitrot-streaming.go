@@ -31,7 +31,7 @@ import (
 	"github.com/minio/minio/internal/ioutil"
 	"github.com/minio/minio/internal/logger"
 )
-
+// TODO Write
 // Calculates bitrot in chunks and writes the hash into the stream.
 type streamingBitrotWriter struct {
 	iow          io.WriteCloser

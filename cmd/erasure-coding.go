@@ -45,7 +45,7 @@ func NewErasure(ctx context.Context, dataBlocks, parityBlocks int, blockSize int
 		return e, reedsolomon.ErrInvShardNum
 	}
 
-	if dataBlocks+parityBlocks > 256 {
+	if dataBlocks+parityBlocks > 256 {//返回错误
 		return e, reedsolomon.ErrMaxShardNum
 	}
 

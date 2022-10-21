@@ -104,7 +104,7 @@ func reduceQuorumErrs(ctx context.Context, errs []error, ignoredErrs []error, qu
 }
 
 // reduceReadQuorumErrs behaves like reduceErrs but only for returning
-// values of maximally occurring errors validated against readQuorum.
+// values of maximally occurring errors validated against readQuorum.reduceReadQuorumErrs的行为类似于reduceErrs，但仅用于返回针对readQuorum验证的最大发生错误的值。
 func reduceReadQuorumErrs(ctx context.Context, errs []error, ignoredErrs []error, readQuorum int) (maxErr error) {
 	return reduceQuorumErrs(ctx, errs, ignoredErrs, readQuorum, errErasureReadQuorum)
 }
@@ -132,7 +132,7 @@ func diskCount(disks []StorageAPI) int {
 // hashed integer slice. Returned integer order is salted
 // with an input key. This results in consistent order.
 // NOTE: collisions are fine, we are not looking for uniqueness
-// in the slices returned.
+// in the slices returned.hashOrder -哈希输入键以返回一致的哈希整片。返回的整数顺序用一个输入键进行腌制。这导致了一致的顺序。注意:碰撞是可以的，我们不寻找返回的片的唯一性。
 func hashOrder(key string, cardinality int) []int {
 	if cardinality <= 0 {
 		// Returns an empty int slice for cardinality < 0.
@@ -161,7 +161,7 @@ func readAllFileInfo(ctx context.Context, disks []StorageAPI, bucket, object, ve
 		g.Go(func() (err error) {
 			if disks[index] == nil {
 				return errDiskNotFound
-			}
+			}//读取不同版本
 			metadataArray[index], err = disks[index].ReadVersion(ctx, bucket, object, versionID, readData)
 			return err
 		}, index)

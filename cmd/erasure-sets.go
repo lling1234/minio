@@ -560,7 +560,7 @@ type auditObjectOp struct {
 	Disks []string `json:"disks"`
 }
 
-// Add erasure set information to the current context
+// Add erasure set information to the current context 向当前上下文添加擦除集信息
 func auditObjectErasureSet(ctx context.Context, object string, set *erasureObjects) {
 	if len(logger.AuditTargets()) == 0 {
 		return
@@ -932,7 +932,7 @@ func listDeletedBuckets(ctx context.Context, storageDisks []StorageAPI, delBucke
 
 // GetObjectNInfo - returns object info and locked object ReadCloser
 func (s *erasureSets) GetObjectNInfo(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, lockType LockType, opts ObjectOptions) (gr *GetObjectReader, err error) {
-	set := s.getHashedSet(object)
+	set := s.getHashedSet(object)//获取hash集合
 	return set.GetObjectNInfo(ctx, bucket, object, rs, h, lockType, opts)
 }
 

@@ -1658,7 +1658,7 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// X-Amz-Copy-Source shouldn't be set for this call.
+	// X-Amz-Copy-Source shouldn't be set for this call.先验证header里没有X-Amz-Copy-Source
 	if _, ok := r.Header[xhttp.AmzCopySource]; ok {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrInvalidCopySource), r.URL)
 		return

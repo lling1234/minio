@@ -907,7 +907,7 @@ func (er erasureObjects) purgeObjectDangling(ctx context.Context, bucket, object
 
 // Object is considered dangling/corrupted if any only
 // if total disks - a combination of corrupted and missing
-// files is lesser than number of data blocks.
+// files is lesser than number of data blocks.对象被认为是悬空/损坏的，只有当磁盘总数-损坏和丢失文件的组合小于数据块的数量。
 func isObjectDangling(metaArr []FileInfo, errs []error, dataErrs []error) (validMeta FileInfo, ok bool) {
 	// We can consider an object data not reliable
 	// when xl.meta is not found in read quorum disks.

@@ -182,7 +182,7 @@ func (er erasureObjects) CopyObject(ctx context.Context, srcBucket, srcObject, d
 	return fi.ToObjectInfo(srcBucket, srcObject, srcOpts.Versioned || srcOpts.VersionSuspended), nil
 }
 
-// GetObjectNInfo - returns object info and an object
+// GetObjectNInfo - returns object info and an object返回对象信息和一个对象读(近)。当err != nil时，返回的读取器总是nil。
 // Read(Closer). When err != nil, the returned reader is always nil.
 func (er erasureObjects) GetObjectNInfo(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, lockType LockType, opts ObjectOptions) (gr *GetObjectReader, err error) {
 	auditObjectErasureSet(ctx, object, &er)
@@ -266,7 +266,7 @@ func (er erasureObjects) GetObjectNInfo(ctx context.Context, bucket, object stri
 		unlockOnDefer = false
 		return gr.WithCleanupFuncs(nsUnlocker), nil
 	}
-
+	// NewGetObjectReader 主要
 	fn, off, length, err := NewGetObjectReader(rs, objInfo, opts)
 	if err != nil {
 		return nil, err
@@ -279,14 +279,14 @@ func (er erasureObjects) GetObjectNInfo(ctx context.Context, bucket, object stri
 	}()
 
 	// Cleanup function to cause the go routine above to exit, in
-	// case of incomplete read.
+	// case of incomplete read. pipe FIFO
 	pipeCloser := func() {
 		pr.CloseWithError(nil)
 	}
 
 	return fn(pr, h, pipeCloser, nsUnlocker)
 }
-
+// TODO 从数据盘获取合成一个object
 func (er erasureObjects) getObjectWithFileInfo(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, fi FileInfo, metaArr []FileInfo, onlineDisks []StorageAPI) error {
 	// Reorder online disks based on erasure distribution order.
 	// Reorder parts metadata based on erasure distribution order.
@@ -440,7 +440,7 @@ func (er erasureObjects) GetObjectInfo(ctx context.Context, bucket, object strin
 }
 
 func (er erasureObjects) deleteIfDangling(ctx context.Context, bucket, object string, metaArr []FileInfo, errs []error, dataErrs []error, opts ObjectOptions) (FileInfo, error) {
-	var err error
+	var err error //如果文件损坏，删除损坏的版本
 	m, ok := isObjectDangling(metaArr, errs, dataErrs)
 	if ok {
 		err = errFileNotFound
@@ -587,7 +587,7 @@ func (er erasureObjects) getObjectFileInfo(ctx context.Context, bucket, object s
 
 	var errs []error
 
-	// Read metadata associated with the object from all disks.
+	// Read metadata associated with the object from all disks.从所有磁盘读取与该对象关联的元数据。
 	if opts.VersionID != "" {
 		metaArr, errs = readAllFileInfo(ctx, disks, bucket, object, opts.VersionID, readData)
 	} else {
@@ -597,7 +597,7 @@ func (er erasureObjects) getObjectFileInfo(ctx context.Context, bucket, object s
 	readQuorum, _, err := objectQuorumFromMeta(ctx, metaArr, errs, er.defaultParityCount)
 	if err != nil {
 		if errors.Is(err, errErasureReadQuorum) && !strings.HasPrefix(bucket, minioMetaBucket) {
-			_, derr := er.deleteIfDangling(ctx, bucket, object, metaArr, errs, nil, opts)
+			_, derr := er.deleteIfDangling(ctx, bucket, object, metaArr, errs, nil, opts) //如果文件损坏，删除损坏的版本
 			if derr != nil {
 				err = derr
 			}
@@ -618,20 +618,20 @@ func (er erasureObjects) getObjectFileInfo(ctx context.Context, bucket, object s
 	// List all online disks.
 	onlineDisks, modTime := listOnlineDisks(disks, metaArr, errs)
 
-	// Pick latest valid metadata.
+	// Pick latest valid metadata.选择最新的有效元数据。
 	fi, err = pickValidFileInfo(ctx, metaArr, modTime, readQuorum)
 	if err != nil {
 		return fi, nil, nil, err
 	}
-
+	// 过滤在线硬盘合适的位置
 	filterOnlineDisksInplace(fi, metaArr, onlineDisks)
 
 	// if one of the disk is offline, return right here no need
-	// to attempt a heal on the object.
+	// to attempt a heal on the object.如果其中一个磁盘脱机，就在这里返回，不需要尝试对对象进行治疗。
 	if countErrs(errs, errDiskNotFound) > 0 {
 		return fi, metaArr, onlineDisks, nil
 	}
-
+	// 错误检测
 	var missingBlocks int
 	for i, err := range errs {
 		if err != nil && errors.Is(err, errFileNotFound) {
@@ -648,17 +648,17 @@ func (er erasureObjects) getObjectFileInfo(ctx context.Context, bucket, object s
 
 	// if missing metadata can be reconstructed, attempt to reconstruct.
 	// additionally do not heal delete markers inline, let them be
-	// healed upon regular heal process.
+	// healed upon regular heal process.如果丢失的元数据可以重新构建，请尝试重新构建。此外，不要治疗删除标记内联，让他们在常规治疗过程中被治疗。
 	if !fi.Deleted && missingBlocks > 0 && missingBlocks < readQuorum {
 		if _, healing := er.getOnlineDisksWithHealing(); !healing {
-			go healObject(bucket, object, fi.VersionID, madmin.HealNormalScan)
+			go healObject(bucket, object, fi.VersionID, madmin.HealNormalScan) //异步文件自愈
 		}
 	}
 
 	return fi, metaArr, onlineDisks, nil
 }
 
-// getObjectInfo - wrapper for reading object metadata and constructs ObjectInfo.
+// getObjectInfo - wrapper for reading object metadata and constructs ObjectInfo.包装器用于读取对象元数据并构造ObjectInfo。
 func (er erasureObjects) getObjectInfo(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error) {
 	fi, _, _, err := er.getObjectFileInfo(ctx, bucket, object, opts, false)
 	if err != nil {
@@ -927,7 +927,7 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 	userDefined := cloneMSS(opts.UserDefined)
 
 	storageDisks := er.getDisks()
-
+	// 校验盘（奇偶盘）
 	parityDrives := len(storageDisks) / 2
 	if !opts.MaxParity {
 		// Get parity and data drive count based on storage class metadata
@@ -972,7 +972,7 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 			userDefined[minIOErasureUpgraded] = strconv.Itoa(parityOrig) + "->" + strconv.Itoa(parityDrives)
 		}
 	}
-	dataDrives := len(storageDisks) - parityDrives
+	dataDrives := len(storageDisks) - parityDrives //数据盘
 
 	// we now know the number of blocks this object needs for data and parity.
 	// writeQuorum is dataBlocks + 1
@@ -989,7 +989,7 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 
 	// Initialize parts metadata 初始化部分元数据
 	partsMetadata := make([]FileInfo, len(storageDisks))
-
+	// 新建文件信息系
 	fi := newFileInfo(pathJoin(bucket, object), dataDrives, parityDrives)
 	fi.VersionID = opts.VersionID
 	if opts.Versioned && fi.VersionID == "" {
@@ -1048,7 +1048,7 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 		}
 	}()
 	// ShardFileSize：最终纠删码数据shard大小，比如blockSize=1M，数据块个数dataBlocks为5，用户上传一个5M的对象，那么这里会将其分五次进行纠删码计算，最终得到的单个shard的实际文件大小为5*shardSize
-	shardFileSize := erasure.ShardFileSize(data.Size())
+	shardFileSize := erasure.ShardFileSize(data.Size())//分片文件大小
 	writers := make([]io.Writer, len(onlineDisks))
 	var inlineBuffers []*bytes.Buffer
 	if shardFileSize >= 0 {
@@ -1081,7 +1081,7 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 			if sz < 0 {
 				sz = data.ActualSize()
 			}
-			inlineBuffers[i] = bytes.NewBuffer(make([]byte, 0, sz))
+			inlineBuffers[i] = bytes.NewBuffer(make([]byte, 0, sz))// TODO newStreamingBitrotWriterBuffer 
 			writers[i] = newStreamingBitrotWriterBuffer(inlineBuffers[i], DefaultBitrotAlgorithm, erasure.ShardSize())
 			continue
 		}

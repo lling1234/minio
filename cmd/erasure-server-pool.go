@@ -476,9 +476,9 @@ func (z *erasureServerPools) getPoolIdxNoLock(ctx context.Context, bucket, objec
 	if err != nil && !isErrObjectNotFound(err) {
 		return idx, err
 	}
-	
+
 	if isErrObjectNotFound(err) {
-		idx = z.getAvailablePoolIdx(ctx, bucket, object, size)//第二步根据object 哈希计算落在每个pool的set单元，然后根据每个pool对应set的可用容量进行选择，会高概率选择上可用容量大的pool
+		idx = z.getAvailablePoolIdx(ctx, bucket, object, size) //第二步根据object 哈希计算落在每个pool的set单元，然后根据每个pool对应set的可用容量进行选择，会高概率选择上可用容量大的pool
 		if idx < 0 {
 			return -1, toObjectErr(errDiskFull)
 		}
@@ -789,8 +789,8 @@ func (z *erasureServerPools) GetObjectNInfo(ctx context.Context, bucket, object 
 		return nil, err
 	}
 
-	object = encodeDirObject(object)
-
+	object = encodeDirObject(object) //路径编码,目录对象被存储为具有“__XLDIR__”后缀的常规对象
+	// 单pool
 	if z.SinglePool() {
 		return z.serverPools[0].GetObjectNInfo(ctx, bucket, object, rs, h, lockType, opts)
 	}
@@ -803,7 +803,7 @@ func (z *erasureServerPools) GetObjectNInfo(ctx context.Context, bucket, object 
 		}
 	}()
 
-	// Acquire lock
+	// Acquire lock 获得锁
 	if lockType != noLock {
 		lock := z.NewNSLock(bucket, object)
 		switch lockType {
@@ -848,7 +848,7 @@ func (z *erasureServerPools) GetObjectNInfo(ctx context.Context, bucket, object 
 	if checkPrecondFn != nil && checkPrecondFn(objInfo) {
 		return nil, PreConditionFailed{}
 	}
-
+	// pool获取set，
 	lockType = noLock // do not take locks at lower levels for GetObjectNInfo()
 	gr, err = z.serverPools[zIdx].GetObjectNInfo(ctx, bucket, object, rs, h, lockType, opts)
 	if err != nil {
@@ -862,6 +862,7 @@ func (z *erasureServerPools) GetObjectNInfo(ctx context.Context, bucket, object 
 	return gr, nil
 }
 
+// getLatestObjectInfoWithIdx返回来自多个池的最新对象的objectInfo(此函数在两个池都有重复写的情况下出现，此函数还返回最新对象所在的附加索引，该索引用于启动GetObject流。
 // getLatestObjectInfoWithIdx returns the objectInfo of the latest object from multiple pools (this function
 // is present in-case there were duplicate writes to both pools, this function also returns the
 // additional index where the latest object exists, that is used to start the GetObject stream.
@@ -873,7 +874,7 @@ func (z *erasureServerPools) getLatestObjectInfoWithIdx(ctx context.Context, buc
 		err  error
 	}, len(z.serverPools))
 	var wg sync.WaitGroup
-	for i, pool := range z.serverPools {
+	for i, pool := range z.serverPools { //获取到pool和set
 		wg.Add(1)
 		go func(i int, pool *erasureSets) {
 			defer wg.Done()
@@ -895,7 +896,7 @@ func (z *erasureServerPools) getLatestObjectInfoWithIdx(ctx context.Context, buc
 		}
 		return a.oi.ModTime.After(b.oi.ModTime)
 	})
-
+	// 查找到文件，返回对象信息和索引
 	for _, res := range results {
 		err := res.err
 		if err == nil {
@@ -919,7 +920,7 @@ func (z *erasureServerPools) getLatestObjectInfoWithIdx(ctx context.Context, buc
 	}
 	return ObjectInfo{}, -1, ObjectNotFound{Bucket: bucket, Object: object}
 }
-
+// GetObjectInfo pool->set
 func (z *erasureServerPools) GetObjectInfo(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error) {
 	if err = checkGetObjArgs(ctx, bucket, object); err != nil {
 		return objInfo, err

@@ -307,7 +307,7 @@ func newFileInfo(object string, dataBlocks, parityBlocks int) (fi FileInfo) {
 	fi.Erasure = ErasureInfo{
 		Algorithm:    erasureAlgorithm,
 		DataBlocks:   dataBlocks,
-		ParityBlocks: parityBlocks,
+		ParityBlocks: parityBlocks,//校验块数
 		BlockSize:    blockSizeV2,
 		Distribution: hashOrder(object, dataBlocks+parityBlocks),
 	}
