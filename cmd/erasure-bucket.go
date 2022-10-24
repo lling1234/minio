@@ -34,11 +34,11 @@ var bucketMetadataOpIgnoredErrs = append(bucketOpIgnoredErrs, errVolumeNotFound)
 
 // Bucket operations
 
-// MakeBucket - make a bucket.
+// MakeBucket - make a bucket. 创建桶接口实现
 func (er erasureObjects) MakeBucketWithLocation(ctx context.Context, bucket string, opts MakeBucketOptions) error {
 	defer NSUpdated(bucket, slashSeparator)
 
-	// Verify if bucket is valid.
+	// Verify if bucket is valid.验证桶是否有效。
 	if !isMinioMetaBucketName(bucket) {
 		if err := s3utils.CheckValidBucketNameStrict(bucket); err != nil {
 			return BucketNameInvalid{Bucket: bucket}
@@ -49,11 +49,11 @@ func (er erasureObjects) MakeBucketWithLocation(ctx context.Context, bucket stri
 
 	g := errgroup.WithNErrs(len(storageDisks))
 
-	// Make a volume entry on all underlying storage disks.
+	// Make a volume entry on all underlying storage disks.在所有底层存储磁盘上创建卷条目。
 	for index := range storageDisks {
 		index := index
 		g.Go(func() error {
-			if storageDisks[index] != nil {
+			if storageDisks[index] != nil {//MakeVol 批量操作
 				if err := storageDisks[index].MakeVol(ctx, bucket); err != nil {
 					if opts.ForceCreate && errors.Is(err, errVolumeExists) {
 						// No need to return error when force create was
@@ -70,7 +70,7 @@ func (er erasureObjects) MakeBucketWithLocation(ctx context.Context, bucket stri
 			return errDiskNotFound
 		}, index)
 	}
-
+	// reduceWriteQuorumErrs的行为类似于reduceErrs，但仅用于返回根据writeQuorum验证的最大发生错误的值。
 	err := reduceWriteQuorumErrs(ctx, g.Wait(), bucketOpIgnoredErrs, er.defaultWQuorum())
 	return toObjectErr(err, bucket)
 }

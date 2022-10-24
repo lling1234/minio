@@ -736,21 +736,21 @@ func (s *xlStorage) MakeVolBulk(ctx context.Context, volumes ...string) error {
 	return nil
 }
 
-// Make a volume entry.
+// Make a volume entry.做一个卷记录。
 func (s *xlStorage) MakeVol(ctx context.Context, volume string) error {
-	if !isValidVolname(volume) {
+	if !isValidVolname(volume) {//isValidVolname根据对象层的要求验证volname名称。
 		return errInvalidArgument
 	}
-
+	// getVolDir -将传入的卷名在后端以一种适用于所有操作系统的平台兼容的方式转换为相应的有效卷名。如果没有找到卷，则会生成一个错误。
 	volumeDir, err := s.getVolDir(volume)
 	if err != nil {
 		return err
 	}
-
+	// Access捕获在windows、plan9和solaris上调用syscall.Access()所花费的时间。访问使用os.Lstat ()
 	if err = Access(volumeDir); err != nil {
-		// Volume does not exist we proceed to create.
+		// Volume does not exist we proceed to create.卷不存在，我们继续创建。
 		if osIsNotExist(err) {
-			// Make a volume entry, with mode 0777 mkdir honors system umask.
+			// Make a volume entry, with mode 0777 mkdir honors system umask.创建一个卷条目，模式0777 mkdir荣誉系统umask。
 			err = mkdirAll(volumeDir, 0o777)
 		}
 		if osIsPermission(err) {
@@ -761,7 +761,7 @@ func (s *xlStorage) MakeVol(ctx context.Context, volume string) error {
 		return err
 	}
 
-	// Stat succeeds we return errVolumeExists.
+	// Stat succeeds we return errVolumeExists.Stat成功，返回errVolumeExists。
 	return errVolumeExists
 }
 

@@ -347,7 +347,7 @@ func registerAPIRouter(router *mux.Router) {
 		router.Methods(http.MethodGet).HandlerFunc(
 			collectAPIStats("resetbucketreplicationstatus", maxClients(gz(httpTraceAll(api.ResetBucketReplicationStatusHandler))))).Queries("replication-reset-status", "")
 
-		// Dummy Bucket Calls
+		// Dummy Bucket Calls 假桶调用
 		// GetBucketACL -- this is a dummy call.
 		router.Methods(http.MethodGet).HandlerFunc(
 			collectAPIStats("getbucketacl", maxClients(gz(httpTraceAll(api.GetBucketACLHandler))))).Queries("acl", "")

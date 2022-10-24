@@ -755,7 +755,7 @@ func (api objectAPIHandlers) PutBucketHandler(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	// Parse incoming location constraint.
+	// Parse incoming location constraint.解析传入的位置约束。
 	location, s3Error := parseLocationConstraint(r)
 	if s3Error != ErrNone {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Error), r.URL)
@@ -763,13 +763,13 @@ func (api objectAPIHandlers) PutBucketHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	// Validate if location sent by the client is valid, reject
-	// requests which do not follow valid region requirements.
+	// requests which do not follow valid region requirements.验证客户端发送的位置是否有效，拒绝不符合有效区域要求的请求。
 	if !isValidLocation(location) {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrInvalidRegion), r.URL)
 		return
 	}
 
-	// check if client is attempting to create more buckets than allowed maximum.
+	// check if client is attempting to create more buckets than allowed maximum.检查客户端是否试图创建比允许的最大桶数更多的桶。
 	if currBuckets := globalBucketMetadataSys.Count(); currBuckets+1 > maxBuckets {
 		apiErr := errorCodes.ToAPIErr(ErrTooManyBuckets)
 		apiErr.Description = fmt.Sprintf("You have attempted to create %d buckets than allowed %d", currBuckets+1, maxBuckets)
@@ -787,9 +787,9 @@ func (api objectAPIHandlers) PutBucketHandler(w http.ResponseWriter, r *http.Req
 		sr, err := globalDNSConfig.Get(bucket)
 		if err != nil {
 			// ErrNotImplemented indicates a DNS backend that doesn't need to check if bucket already
-			// exists elsewhere
+			// exists elsewhere ErrNotImplemented表示DNS后端不需要检查桶是否已经存在于其他地方
 			if err == dns.ErrNoEntriesFound || err == dns.ErrNotImplemented {
-				// Proceed to creating a bucket.
+				// Proceed to creating a bucket.继续创建一个桶。
 				if err = objectAPI.MakeBucketWithLocation(ctx, bucket, opts); err != nil {
 					writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 					return
@@ -805,10 +805,10 @@ func (api objectAPIHandlers) PutBucketHandler(w http.ResponseWriter, r *http.Req
 					return
 				}
 
-				// Load updated bucket metadata into memory.
+				// Load updated bucket metadata into memory.将更新的桶元数据加载到内存中。
 				globalNotificationSys.LoadBucketMetadata(GlobalContext, bucket)
 
-				// Make sure to add Location information here only for bucket
+				// Make sure to add Location information here only for bucket确保在这里仅为桶添加位置信息
 				w.Header().Set(xhttp.Location,
 					getObjectLocation(r, globalDomainNames, bucket, ""))
 
@@ -832,7 +832,7 @@ func (api objectAPIHandlers) PutBucketHandler(w http.ResponseWriter, r *http.Req
 		apiErr := ErrBucketAlreadyExists
 		if !globalDomainIPs.Intersection(set.CreateStringSet(getHostsSlice(sr)...)).IsEmpty() {
 			apiErr = ErrBucketAlreadyOwnedByYou
-		}
+		}//没有IP交叉，这意味着桶存在，但可能来自不同的部署有不同的IP地址。在给定的路径前缀下，桶名在联邦中是全局唯一的，名称冲突是不允许的。返回相应的错误。
 		// No IPs seem to intersect, this means that bucket exists but has
 		// different IP addresses perhaps from a different deployment.
 		// bucket names are globally unique in federation at a given
@@ -841,23 +841,23 @@ func (api objectAPIHandlers) PutBucketHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Proceed to creating a bucket.
+	// Proceed to creating a bucket.创建桶接口
 	if err := objectAPI.MakeBucketWithLocation(ctx, bucket, opts); err != nil {
 		if _, ok := err.(BucketExists); ok {
 			// Though bucket exists locally, we send the site-replication
 			// hook to ensure all sites have this bucket. If the hook
 			// succeeds, the client will still receive a bucket exists
-			// message.
+			// message.虽然桶在本地存在，但我们发送站点复制钩子以确保所有站点都有这个桶。如果钩子成功，客户端仍然会收到一个桶存在的消息。
 			globalSiteReplicationSys.MakeBucketHook(ctx, bucket, opts)
 		}
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
 
-	// Load updated bucket metadata into memory.
+	// Load updated bucket metadata into memory.将更新的桶元数据加载到内存中。
 	globalNotificationSys.LoadBucketMetadata(GlobalContext, bucket)
 
-	// Call site replication hook
+	// Call site replication hook 调用站点复制钩子
 	if err := globalSiteReplicationSys.MakeBucketHook(ctx, bucket, opts); err != nil {
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
@@ -1286,7 +1286,7 @@ func (api objectAPIHandlers) DeleteBucketHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Verify if the caller has sufficient permissions.
+	// Verify if the caller has sufficient permissions.验证调用者是否具有足够的权限。
 	if s3Error := checkRequestAuthType(ctx, r, policy.DeleteBucketAction, bucket, ""); s3Error != ErrNone {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Error), r.URL)
 		return
@@ -1339,7 +1339,7 @@ func (api objectAPIHandlers) DeleteBucketHandler(w http.ResponseWriter, r *http.
 
 	deleteBucket := objectAPI.DeleteBucket
 
-	// Attempt to delete bucket.
+	// Attempt to delete bucket.尝试删除bucket。
 	if err := deleteBucket(ctx, bucket, DeleteBucketOptions{
 		Force:      forceDelete,
 		SRDeleteOp: getSRBucketDeleteOp(globalSiteReplicationSys.isEnabled()),
